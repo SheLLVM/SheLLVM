@@ -32,7 +32,7 @@ void shellcode()
 
 ```
 // hello.c
-#define WIN32_LEAN_AND_MEAIN
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 void say_hello()
