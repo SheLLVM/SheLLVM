@@ -5,4 +5,6 @@ add_definitions(${LLVM_DEFINITIONS})
 add_library(shellvm MODULE
   PreparePass.cpp
   MergeCallsPass.cpp
-  GlobalToStackPass.cpp)
+  GlobalToStackPass.cpp
+  InlineCtorsPass.cpp
+)
