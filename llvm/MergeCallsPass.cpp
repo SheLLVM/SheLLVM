@@ -81,7 +81,9 @@ struct MergeCalls : public FunctionPass {
         }
     }
 
-    for(auto &[target, callers] : funcToInvokers) {
+    for(auto &KV: funcToInvokers) {
+        Function *target = KV.first;
+        std::vector<CallInst*> &callers = KV.second;
         if(callers.size() > 1) {
             if(!functionModified)
                 functionModified = true;
@@ -157,10 +159,10 @@ struct MergeCalls : public FunctionPass {
             SwitchInst* switchBackInstr = SwitchInst::Create(whereFromNode, getUnreachableBlock(F), callerToRet.size(), callBlock);
             int switchCtr = 0;
 
-            for(auto &[parent, ret] : callerToRet) {
+            for(auto &KV : callerToRet) {
                 llvm::ConstantInt* branchIdx = llvm::ConstantInt::get(F.getContext(), llvm::APInt(32, switchCtr, true));
-                whereFromNode->addIncoming(branchIdx, parent);
-                switchBackInstr->addCase(branchIdx, ret);
+                whereFromNode->addIncoming(branchIdx, KV.first);
+                switchBackInstr->addCase(branchIdx, KV.second);
                 ++switchCtr;
             }
         }

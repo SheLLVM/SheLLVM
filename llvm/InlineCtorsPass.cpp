@@ -65,8 +65,8 @@ struct InlineCtorsPass : public FunctionPass {
       while (isa<AllocaInst>(I))
         ++I;
 
-      for (auto & [ Fn, Priority ] : Ctors) {
-        CallInst::Create(Fn, ArrayRef<Value*>(), "", &*I);
+      for (auto &KV : Ctors) {
+        CallInst::Create(KV.first, ArrayRef<Value*>(), "", &*I);
       }
     }
 
@@ -77,8 +77,8 @@ struct InlineCtorsPass : public FunctionPass {
         continue;
       }
 
-      for (auto & [ Fn, Priority ] : Dtors) {
-        CallInst::Create(Fn, ArrayRef<Value*>(), "", &*I);
+      for (auto &KV : Dtors) {
+        CallInst::Create(KV.first, ArrayRef<Value*>(), "", &*I);
       }
     }
 
