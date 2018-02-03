@@ -86,6 +86,9 @@ struct GlobalToStack : public ModulePass {
     Instruction *insertionPoint = &*BB.getFirstInsertionPt();
     Instruction *inst = new AllocaInst(
       G.getValueType(),
+#if LLVM_VERSION_MAJOR >= 5
+      G.getType()->getAddressSpace(),
+#endif
       nullptr,
       G.getAlignment(),
       "",
