@@ -19,6 +19,7 @@ struct MergeCalls : public FunctionPass {
   MergeCalls() : FunctionPass(ID) {}
 
   bool valueEscapes(const Instruction *Inst) const {
+    // Taken verbatim off LLVM's reg2mem pass.
     const BasicBlock *BB = Inst->getParent();
     for (const User *U : Inst->users()) {
       const Instruction *UI = cast<Instruction>(U);
@@ -28,8 +29,34 @@ struct MergeCalls : public FunctionPass {
      return false;
   }
 
+  BasicBlock* getUnreachableBlock(Function& F) {
+      for (BasicBlock &BB : F) {
+          if(BB.getInstList().size() == 1) {
+              // Single-instruction block, let's see if it only consists of a unreachable instruction.
+              const Instruction* instr = BB.getFirstNonPHI();
+ 
+              if(instr == nullptr) {
+                  // Guess we only have a single PHI instruction in this block (?)
+                  continue;
+              }
+
+              if(instr->getOpcode() == Instruction::Unreachable) {
+                  // We only have a single instruction, and it's an "unreachable". Return the basic block it's in.
+                  return &BB;
+              }
+          }
+      }
+
+      // No 'unreachable' basic block. Let's build our own.
+      BasicBlock* unreachableBlock = BasicBlock::Create(F.getContext(), "", &F, nullptr);
+      new UnreachableInst(F.getContext(), unreachableBlock);
+
+      return unreachableBlock;
+  }
+
   bool runOnFunction(Function &F) override {
     std::map<Function*, std::vector<CallInst*>> funcToInvokers;
+    bool functionModified = false;
 
     for(BasicBlock &BB : F) {
         for(Instruction &I : BB) {
@@ -56,12 +83,14 @@ struct MergeCalls : public FunctionPass {
 
     for(auto &[target, callers] : funcToInvokers) {
         if(callers.size() > 1) {
+            if(!functionModified)
+                functionModified = true;
             std::vector<Value*> callArgs;
             std::map<BasicBlock*, BasicBlock*> callerToRet;
             std::map<Instruction*, BasicBlock*> callerToOrigParent;
             BasicBlock* callBlock = BasicBlock::Create(F.getContext(), "", &F, nullptr);
 
-            // alloca insertion point tracing logic taken verbatim off reg2mem pass.
+            // alloca insertion point tracing logic taken verbatim off LLVM's reg2mem pass.
             BasicBlock* BBEntry = &F.getEntryBlock();
             BasicBlock::iterator I = BBEntry->begin();
             while (isa<AllocaInst>(I)) ++I;
@@ -123,8 +152,9 @@ struct MergeCalls : public FunctionPass {
             }
 
             // Emit PHI/switch instructions for branching back to the return blocks:
-            PHINode* whereFromNode = PHINode::Create(Type::getInt32Ty(F.getContext()), callers.size(), "", callInstr); 
-            SwitchInst* switchBackInstr = SwitchInst::Create(whereFromNode, callerToRet.begin()->second, callerToRet.size(), callBlock);
+            PHINode* whereFromNode = PHINode::Create(Type::getInt32Ty(F.getContext()), callers.size(), "", callInstr);
+            // Our default is gonna be a basic block that only contains an 'unreachable' instruction.
+            SwitchInst* switchBackInstr = SwitchInst::Create(whereFromNode, getUnreachableBlock(F), callerToRet.size(), callBlock);
             int switchCtr = 0;
 
             for(auto &[parent, ret] : callerToRet) {
@@ -136,7 +166,7 @@ struct MergeCalls : public FunctionPass {
         }
     }
 
-    return false;
+    return functionModified;
   }
 }; // end of struct MergeCalls
 }  // end of anonymous namespace
