@@ -8,3 +8,4 @@ add_library(shellvm MODULE
   GlobalToStackPass.cpp
   InlineCtorsPass.cpp
 )
+set_target_properties(shellvm PROPERTIES PREFIX "")
