@@ -1,0 +1,19 @@
+language: cpp
+os:
+- linux
+- osx
+
+dist: trusty
+sudo: false
+
+osx_image: xcode7.3
+
+compiler: clang
+
+addons:
+  apt:
+    packages:
+    - cmake
+
+script:
+- mkdir -p build && cd build && cmake .. && make
