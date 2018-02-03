@@ -256,4 +256,4 @@ This ensures that the resultant module contains no globals, only one function,
 no switch statements, etc.
 
 It generally makes sure that the LLVM module is ready for code generation and
-will behave as proper shellcode when 
+will behave as proper shellcode when lowered into machine instructions.
