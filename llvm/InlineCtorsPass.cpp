@@ -49,13 +49,13 @@ struct InlineCtorsPass : public FunctionPass {
     getFunctions(GlobalDtors, Dtors);
 
     // Sort constructors in ascending order of priority
-    std::sort(Ctors.begin(), Ctors.end(), [] (FunctionPair &A, FunctionPair &B) -> bool {
-      return A.second < B.second;
+    std::sort(Ctors.begin(), Ctors.end(), [] (const FunctionPair &A, const FunctionPair &B) -> bool {
+      return A.second > B.second;
     });
 
     // Sort destructors in descending order of priority
-    std::sort(Ctors.begin(), Ctors.end(), [] (FunctionPair &A, FunctionPair &B) -> bool {
-      return A.second > B.second;
+    std::sort(Ctors.begin(), Ctors.end(), [] (const FunctionPair &A, const FunctionPair &B) -> bool {
+      return A.second < B.second;
     });
 
     {
@@ -65,8 +65,8 @@ struct InlineCtorsPass : public FunctionPass {
       while (isa<AllocaInst>(I))
         ++I;
 
-      for (auto & [ Fn, Priority ] : Ctors) {
-        CallInst::Create(Fn, ArrayRef<Value*>(), "", &*I);
+      for (auto &KV : Ctors) {
+        CallInst::Create(KV.first, ArrayRef<Value*>(), "", &*I);
       }
     }
 
@@ -77,8 +77,8 @@ struct InlineCtorsPass : public FunctionPass {
         continue;
       }
 
-      for (auto & [ Fn, Priority ] : Dtors) {
-        CallInst::Create(Fn, ArrayRef<Value*>(), "", &*I);
+      for (auto &KV : Dtors) {
+        CallInst::Create(KV.first, ArrayRef<Value*>(), "", &*I);
       }
     }
 
