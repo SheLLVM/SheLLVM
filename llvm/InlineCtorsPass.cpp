@@ -49,12 +49,12 @@ struct InlineCtorsPass : public FunctionPass {
     getFunctions(GlobalDtors, Dtors);
 
     // Sort constructors in ascending order of priority
-    std::sort(Ctors.begin(), Ctors.end(), [] (FunctionPair &A, FunctionPair &B) -> bool {
+    std::sort(Ctors.begin(), Ctors.end(), [] (const FunctionPair &A, const FunctionPair &B) -> bool {
       return A.second > B.second;
     });
 
     // Sort destructors in descending order of priority
-    std::sort(Ctors.begin(), Ctors.end(), [] (FunctionPair &A, FunctionPair &B) -> bool {
+    std::sort(Ctors.begin(), Ctors.end(), [] (const FunctionPair &A, const FunctionPair &B) -> bool {
       return A.second < B.second;
     });
 
