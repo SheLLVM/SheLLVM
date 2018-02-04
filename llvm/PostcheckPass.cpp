@@ -22,7 +22,9 @@ struct Postcheck : public ModulePass {
               return false;
           }
 
-          return dfsTraverse(child);
+          if(!dfsTraverse(child)) {
+              return false;
+          }
       }
 
       return true;
