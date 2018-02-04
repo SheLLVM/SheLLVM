@@ -75,10 +75,10 @@ struct Postcheck : public ModulePass {
 
       return false;
   }
-  }; // end of struct Precheck
+  }; // end of struct Postcheck
 }  // end of anonymous namespace
 
 char Postcheck::ID = 0;
-static RegisterPass<Postcheck> X("shellvm-postheck", "Postcheck Pass",
+static RegisterPass<Postcheck> X("shellvm-postcheck", "Postcheck Pass",
                                   false /* Only looks at CFG */,
                                   false /* Analysis Pass */);
