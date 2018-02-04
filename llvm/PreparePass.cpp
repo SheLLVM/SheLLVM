@@ -19,8 +19,7 @@ struct PreparePass : public ModulePass {
   bool runOnModule(Module &M) override {
     auto GlobalMains = M.getNamedGlobal("llvm.global.annotations");
     if (!GlobalMains) {
-      errs() << "ERROR: No functions have been annotated with shellvm-main\n";
-      return false;
+      report_fatal_error("No functions have been annotated with shellvm-main");
     }
 
     bool FoundAnnotation = false;
@@ -37,9 +36,8 @@ struct PreparePass : public ModulePass {
 
         if (Annotation == "shellvm-main") {
           if (FoundAnnotation) {
-            errs() << "WARNING: More than one function has been annotated "
-                      "with shellvm-main\n";
-            break;
+            report_fatal_error("More than one function has been annotated "
+                      "with shellvm-main");
           }
           Fn->addFnAttr(Annotation);
           FoundAnnotation = true;
@@ -49,8 +47,7 @@ struct PreparePass : public ModulePass {
     }
 
     if (!FoundAnnotation) {
-      errs() << "ERROR: No functions have been annotated with shellvm-main\n";
-      return false;
+      report_fatal_error("No functions have been annotated with shellvm-main");
     }
 
     for (Function &F : M.getFunctionList()) {
