@@ -84,6 +84,11 @@ struct Flatten : public FunctionPass {
       // Used to build the list of functions invoked (directly or indirectly) by the main routine.
       for(auto &KV : *node) {
           CallGraphNode* child = KV.second;
+
+          if(child == nullptr) {
+              return;
+          }
+
           if(std::find(functionsFromMain.begin(), functionsFromMain.end(), child->getFunction()) == functionsFromMain.end()) {
               functionsFromMain.push_back(child->getFunction());
           }
