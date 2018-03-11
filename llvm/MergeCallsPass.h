@@ -43,7 +43,7 @@ struct MergeCalls : public FunctionPass {
                   continue;
               }
 
-              if(instr->getOpcode() == Instruction::Unreachable) {
+              if(isa<UnreachableInst>(instr)) {
                   // We only have a single instruction, and it's an "unreachable". Return the basic block it's in.
                   return &BB;
               }
@@ -63,7 +63,7 @@ struct MergeCalls : public FunctionPass {
 
     for(BasicBlock &BB : F) {
         for(Instruction &I : BB) {
-           if(I.getOpcode() == Instruction::Call) {
+           if(isa<CallInst>(I)) {
                 CallInst& C = cast<CallInst>(I);
                 if(C.isInlineAsm()) {
                     // This is inline assembly; this can be deduplicated by a

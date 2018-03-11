@@ -61,8 +61,8 @@ struct Postcheck : public ModulePass {
       if(mainFunc) {
           for(BasicBlock& BB : *mainFunc) {
             for(Instruction& I : BB) {
-                if(I.getOpcode() == Instruction::Switch) {
-                    report_fatal_error("switch instruction found within main function.");
+                if(isa<SwitchInst>(I)) {
+                    report_fatal_error("Switch instruction found within main function.");
                 }
             }
           }
