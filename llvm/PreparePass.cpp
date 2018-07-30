@@ -3,6 +3,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/IPO/Internalize.h"
 
 using namespace llvm;
 
@@ -15,6 +16,15 @@ namespace {
 struct PreparePass : public ModulePass {
   static char ID;
   PreparePass() : ModulePass(ID) {}
+
+  bool mustPreserve(const GlobalValue& value) {
+    if(!isa<Function>(value))
+        return false;
+
+    const Function& fn = cast<Function>(value);
+    return (!fn.isDeclaration() && 
+            fn.hasFnAttribute("shellvm-main"));
+  }
 
   bool runOnModule(Module &M) override {
     auto GlobalMains = M.getNamedGlobal("llvm.global.annotations");
@@ -50,14 +60,8 @@ struct PreparePass : public ModulePass {
       report_fatal_error("No functions have been annotated with shellvm-main");
     }
 
-    for (Function &F : M.getFunctionList()) {
-      if (!F.hasFnAttribute("shellvm-main") && !F.isDeclaration()) {
-        // Mark all other functions as private,
-        // excluding functions defined in another module
-        F.setLinkage(GlobalValue::InternalLinkage);
-      }
-    }
-
+    llvm::internalizeModule(M, std::bind(&PreparePass::mustPreserve, this,
+                                         std::placeholders::_1));
     return true;
   }
 
