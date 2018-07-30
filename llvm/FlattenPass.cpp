@@ -89,7 +89,7 @@ struct Flatten : public FunctionPass {
               return;
           }
 
-          if(std::find(functionsFromMain.begin(), functionsFromMain.end(), child->getFunction()) == functionsFromMain.end()) {
+          if(child->getFunction() != nullptr && std::find(functionsFromMain.begin(), functionsFromMain.end(), child->getFunction()) == functionsFromMain.end()) {
               functionsFromMain.push_back(child->getFunction());
           }
 
