@@ -123,6 +123,6 @@ struct GlobalToStack : public ModulePass {
 }  // end of anonymous namespace
 
 char GlobalToStack::ID = 0;
-static RegisterPass<GlobalToStack> X("global2stack", "Global-to-Stack Pass",
+static RegisterPass<GlobalToStack> X("shellvm-global2stack", "Global-to-Stack Pass",
                                      false /* Only looks at CFG */,
                                      false /* Analysis Pass */);

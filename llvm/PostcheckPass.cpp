@@ -35,6 +35,10 @@ struct Postcheck : public ModulePass {
       Function* mainFunc = nullptr;
 
       for(Function& f: M.functions()) {
+          if(f.isIntrinsic()) {
+              continue;
+          }
+
           if(mainFunc) {
               report_fatal_error("More than one function in module!");
               mainFunc = nullptr;

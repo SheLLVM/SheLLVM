@@ -125,7 +125,7 @@ struct MergeCalls : public FunctionPass {
 
                 // Demote the call instruction as well if it has any users.
                 for(User* U : caller->users()) {
-                    DemoteRegToStack(cast<Instruction>(*caller), false, AllocaInsertionPoint);
+                    DemoteRegToStack(cast<Instruction>(*caller), false, AllocaInsertionPoint); 
                     break;
                 }
 
