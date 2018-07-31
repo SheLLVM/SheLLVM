@@ -18,7 +18,7 @@ struct Postcheck : public ModulePass {
               return true;
           }
 
-          if(!child->getFunction()->isIntrinsic()) {
+          if(child->getFunction() && !child->getFunction()->isIntrinsic()) {
               return false;
           }
 
@@ -57,8 +57,10 @@ struct Postcheck : public ModulePass {
       }
 
       // Check 2: Make sure there are no globals.
-      if(M.getGlobalList().size() > 0) {
-          report_fatal_error("Module has global variables!");
+      for(GlobalVariable& global : M.getGlobalList()) {
+          if(!global.getSection().equals("llvm.metadata")) {
+              report_fatal_error("Module has global variables!");
+          }
       }
 
       // Check 3: No switch instructions allowed in function body.
