@@ -4,7 +4,7 @@
 ; These are then used by all Win32 loader stubs to load their various symbols.
 
 %struct.PEB = type { [4 x i8], [2 x i8*], %struct.PEB_LDR_DATA* }
-define private %struct.PEB* @.WINNT.getPEB() readonly {
+define private %struct.PEB* @.WINNT.getPEB() readonly norecurse {
   %PEBPTR = call i8* asm "mov %fs:0x30, $0", "=r,~{dirflag},~{fpsr},~{flags}"()
   %PEB = bitcast i8* %PEBPTR to %struct.PEB*
   ret %struct.PEB* %PEB
