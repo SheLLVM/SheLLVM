@@ -14,122 +14,113 @@
 using namespace llvm;
 
 namespace {
-struct Flatten : public FunctionPass {
+struct Flatten : public ModulePass {
   static char ID;
   std::vector<Function *> functionsFromMain;
-  Flatten() : FunctionPass(ID) {}
+  Flatten() : ModulePass(ID) {}
 
-  bool inlineFunction(Function &F) {
-    if (F.hasFnAttribute(Attribute::NoInline)) {
+  /// Inlines function F into Caller, using MergeCalls to avoid duplication.
+  bool inlineFunction(Function *F, Function *Caller) {
+    if (F->hasFnAttribute(Attribute::NoInline)) {
       // Function not eligible for inlining. Bail out.
       return false;
     }
 
-    if (F.isDeclaration()) {
+    if (F->isDeclaration()) {
       // Function is declared, and not defined. Bail out.
       return false;
     }
 
-    std::vector<CallInst *> callers;
-
-    for (User *U : F.users()) {
-      if (!isa<CallInst>(U)) {
-        // User is not a call instruction, proceed to the next one.
-        continue;
-      }
-
-      CallInst *caller = cast<CallInst>(U);
-      Function *parentFunction = caller->getFunction();
-
-      if (std::find(functionsFromMain.begin(), functionsFromMain.end(),
-                    parentFunction) != functionsFromMain.end()) {
-        // Called indirectly by main. This is not (currently) eligible.
-        return false;
-      }
-
-      callers.push_back(caller);
-    }
-
-    if (callers.size() <= 0) {
-      // We have no users. We are not eligible for inlining. Bail.
-      return false;
-    }
-
     // First, run the MergeCalls pass on it:
-    MergeCalls *mergeCalls = new MergeCalls();
-    mergeCalls->runOnFunction(F);
-    delete mergeCalls;
+    CallInst *CallSite = MergeCalls::mergeCallSites(Caller, F);
 
     // Coerce LLVM to inline the function.
     InlineFunctionInfo IFI;
-    for (CallInst *caller : callers) {
-      InlineFunction(caller, IFI, nullptr, true);
-    }
+    if (!InlineFunction(CallSite, IFI))
+      return false;
 
-    // Check if we still have any users left. If not, we can proceed with
-    // erasing the function from the module.
-    bool hasUsers = false;
-    for (User *U : F.users()) {
-      hasUsers = true;
-      break;
-    }
-
-    if (!hasUsers) {
-      F.eraseFromParent();
+    // If F is now completely dead, we can erase it from the module.
+    if (F->isDefTriviallyDead()) {
+      F->eraseFromParent();
     }
 
     return true;
   }
 
-  void dfsTraverse(CallGraphNode *node) {
-    // Depth-first search of the call graph.
-    // Used to build the list of functions invoked (directly or indirectly) by
-    // the main routine.
-    for (auto &KV : *node) {
-      CallGraphNode *child = KV.second;
-
-      if (child == nullptr) {
-        return;
+  /// See if Caller calls Callee
+  bool doesNodeCallOther(CallGraphNode *Caller, CallGraphNode *Callee) {
+    for (unsigned i = 0; i < Caller->size(); ++i) {
+      if ((*Caller)[i] == Callee) {
+        return true;
       }
-
-      if (child->getFunction() != nullptr &&
-          std::find(functionsFromMain.begin(), functionsFromMain.end(),
-                    child->getFunction()) == functionsFromMain.end()) {
-        functionsFromMain.push_back(child->getFunction());
-      }
-
-      dfsTraverse(child);
     }
+
+    return false;
   }
 
-  bool runOnFunction(Function &F) override {
-    if (!F.hasFnAttribute("shellvm-main")) {
-      // We only want to run on the main function.
-      return false;
+  /// Find the CallGraphNode that solely calls CGN, or nullptr if it's not
+  /// called by exactly one other function.
+  CallGraphNode *getSingleCaller(CallGraph &CG, CallGraphNode *CGN) {
+    CallGraphNode *Caller = nullptr;
+    for (auto &CGI : CG) {
+      std::unique_ptr<CallGraphNode> &CGN2 = CGI.second;
+
+      if (!doesNodeCallOther(CGN2.get(), CGN)) {
+        continue; // Function represented by CGN2 does not call CGN
+      }
+
+      if (CGN2.get() == CG.getExternalCallingNode()) {
+        // CGN2 - a caller of our function - is actually the external calling
+        // node, meaning our function is called externally. It doesn't have a
+        // single, definitive caller.
+        return nullptr;
+      }
+
+      if (Caller != nullptr) {
+        // We're already called by something else, meaning we have more
+        // than one external caller.
+        return nullptr;
+      }
+
+      // Record our caller, but keep looping to make sure it's the only one.
+      Caller = CGN2.get();
+      assert(Caller->getFunction() && "Caller doesn't represent a function!");
     }
 
-    // Build the call graph of the entire module.
-    CallGraph *cg = new CallGraph(*F.getParent());
+    return Caller;
+  }
 
-    // Start traversing the call graph for the main function.
-    CallGraphNode *cgn = cg->operator[](&F);
-    dfsTraverse(cgn);
+  bool runOnModule(Module &M) override {
+    bool ModifiedAny = false;
+    bool ModifiedOne = false;
 
+    // We keep running, inlining functions into other functions, until there's
+    // no work left to do.
     do {
-      // Kinda messy, but necessary in this case. We need to signal deletion of
-      // any inlined functions from functionsFromMain. This requires us to alter
-      // functionsFromMain from within the context of the loop.
-      for (std::vector<Function *>::iterator it = functionsFromMain.begin();
-           it != functionsFromMain.end();) {
-        if (inlineFunction(*(*it))) {
-          it = functionsFromMain.erase(it);
-        } else {
-          ++it;
+      ModifiedOne = false;
+
+      // Build the call graph of the entire module.
+      CallGraph CG(M);
+
+      for (Function &F : M.functions()) {
+        CallGraphNode *CGN = CG[&F];
+        CallGraphNode *Caller = getSingleCaller(CG, CGN);
+
+        if (Caller == nullptr) {
+          continue; // We need a function with a single caller function
+        }
+
+        if (inlineFunction(&F, Caller->getFunction())) {
+          // Mark the module as modified and start over
+          ModifiedOne = true;
+          ModifiedAny = true;
+          break;
         }
       }
-    } while (functionsFromMain.size() > 0);
 
-    return true;
+    } while (ModifiedOne);
+
+    return ModifiedAny;
   }
 }; // end of struct Flatten
 } // end of anonymous namespace
