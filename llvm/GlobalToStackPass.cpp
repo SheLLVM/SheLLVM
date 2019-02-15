@@ -12,7 +12,7 @@ using namespace llvm;
 namespace {
 static Function *getUsingFunction(Value &V) {
   Function *F = nullptr;
-  SmallVector<User*,4> Worklist;
+  SmallVector<User *, 4> Worklist;
   for (auto *U : V.users())
     Worklist.push_back(U);
   while (!Worklist.empty()) {
@@ -36,7 +36,7 @@ static Function *getUsingFunction(Value &V) {
 
 // Copied from GlobalOpt.cpp
 static void makeAllConstantUsesInstructions(Constant *C) {
-  SmallVector<ConstantExpr*,4> Users;
+  SmallVector<ConstantExpr *, 4> Users;
   for (auto *U : C->users()) {
     if (isa<ConstantExpr>(U))
       Users.push_back(cast<ConstantExpr>(U));
@@ -48,7 +48,7 @@ static void makeAllConstantUsesInstructions(Constant *C) {
           "Can't transform non-constantexpr non-instruction to instruction!");
   }
 
-  SmallVector<Value*,4> UUsers;
+  SmallVector<Value *, 4> UUsers;
   for (auto *U : Users) {
     UUsers.clear();
     for (auto *UU : U->users())
@@ -84,15 +84,12 @@ struct GlobalToStack : public ModulePass {
 
     BasicBlock &BB = F->getEntryBlock();
     Instruction *insertionPoint = &*BB.getFirstInsertionPt();
-    Instruction *inst = new AllocaInst(
-      G.getValueType(),
+    Instruction *inst =
+        new AllocaInst(G.getValueType(),
 #if LLVM_VERSION_MAJOR >= 5
-      G.getType()->getAddressSpace(),
+                       G.getType()->getAddressSpace(),
 #endif
-      nullptr,
-      G.getAlignment(),
-      "",
-      insertionPoint);
+                       nullptr, G.getAlignment(), "", insertionPoint);
     inst->takeName(&G);
 
     // Some users of G might be ConstantExprs. These can't refer
@@ -120,9 +117,10 @@ struct GlobalToStack : public ModulePass {
     AU.setPreservesCFG();
   }
 }; // end of struct GlobalToStack
-}  // end of anonymous namespace
+} // end of anonymous namespace
 
 char GlobalToStack::ID = 0;
-static RegisterPass<GlobalToStack> X("shellvm-global2stack", "Global-to-Stack Pass",
+static RegisterPass<GlobalToStack> X("shellvm-global2stack",
+                                     "Global-to-Stack Pass",
                                      false /* Only looks at CFG */,
                                      false /* Analysis Pass */);

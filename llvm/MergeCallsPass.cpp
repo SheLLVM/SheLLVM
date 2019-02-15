@@ -1,5 +1,5 @@
-#include "llvm/Pass.h"
 #include "MergeCallsPass.h"
+#include "llvm/Pass.h"
 
 using namespace llvm;
 

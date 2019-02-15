@@ -17,13 +17,12 @@ struct PreparePass : public ModulePass {
   static char ID;
   PreparePass() : ModulePass(ID) {}
 
-  bool mustPreserve(const GlobalValue& value) {
-    if(!isa<Function>(value))
-        return false;
+  bool mustPreserve(const GlobalValue &value) {
+    if (!isa<Function>(value))
+      return false;
 
-    const Function& fn = cast<Function>(value);
-    return (!fn.isDeclaration() && 
-            fn.hasFnAttribute("shellvm-main"));
+    const Function &fn = cast<Function>(value);
+    return (!fn.isDeclaration() && fn.hasFnAttribute("shellvm-main"));
   }
 
   bool runOnModule(Module &M) override {
@@ -47,7 +46,7 @@ struct PreparePass : public ModulePass {
         if (Annotation == "shellvm-main") {
           if (FoundAnnotation) {
             report_fatal_error("More than one function has been annotated "
-                      "with shellvm-main");
+                               "with shellvm-main");
           }
           Fn->addFnAttr(Annotation);
           FoundAnnotation = true;
@@ -60,8 +59,8 @@ struct PreparePass : public ModulePass {
       report_fatal_error("No functions have been annotated with shellvm-main");
     }
 
-    llvm::internalizeModule(M, std::bind(&PreparePass::mustPreserve, this,
-                                         std::placeholders::_1));
+    llvm::internalizeModule(
+        M, std::bind(&PreparePass::mustPreserve, this, std::placeholders::_1));
     return true;
   }
 
