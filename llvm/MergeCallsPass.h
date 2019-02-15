@@ -38,11 +38,7 @@ struct MergeCalls : public FunctionPass {
           if(BB.getInstList().size() == 1) {
               // Single-instruction block, let's see if it only consists of a unreachable instruction.
               const Instruction* instr = BB.getFirstNonPHI();
-
-              if(instr == nullptr) {
-                  // Guess we only have a single PHI instruction in this block (?)
-                  continue;
-              }
+              assert(instr && "basic block contains no non-phi instructions");
 
               if(isa<UnreachableInst>(instr)) {
                   // We only have a single instruction, and it's an "unreachable". Return the basic block it's in.
