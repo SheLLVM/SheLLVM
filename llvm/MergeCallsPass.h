@@ -60,10 +60,9 @@ struct MergeCalls : public FunctionPass {
 
     for (BasicBlock &BB : *F) {
       for (Instruction &I : BB) {
-        if (isa<CallInst>(I)) {
-          CallInst &C = cast<CallInst>(I);
-          if (!C.isInlineAsm() && C.getCalledFunction() == Target) {
-            CallSites.push_back(&C);
+        if (auto *C = dyn_cast<CallInst>(&I)) {
+          if (!C->isInlineAsm() && C->getCalledFunction() == Target) {
+            CallSites.push_back(C);
           }
         }
       }

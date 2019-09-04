@@ -38,8 +38,8 @@ static Function *getUsingFunction(Value &V) {
 static void makeAllConstantUsesInstructions(Constant *C) {
   SmallVector<ConstantExpr *, 4> Users;
   for (auto *U : C->users()) {
-    if (isa<ConstantExpr>(U))
-      Users.push_back(cast<ConstantExpr>(U));
+    if (auto *CE = dyn_cast<ConstantExpr>(U))
+      Users.push_back(CE);
     else
       // We should never get here; allNonInstructionUsersCanBeMadeInstructions
       // should not have returned true for C.
