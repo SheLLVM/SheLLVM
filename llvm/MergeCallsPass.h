@@ -82,17 +82,6 @@ struct MergeCalls : public FunctionPass {
     std::map<Instruction *, BasicBlock *> CallSiteToOrigParent;
     BasicBlock *CallBlock = BasicBlock::Create(F->getContext(), "", F, nullptr);
 
-    // alloca insertion point tracing logic taken verbatim off LLVM's
-    // reg2mem pass.
-    BasicBlock *BBEntry = &F->getEntryBlock();
-    BasicBlock::iterator I = BBEntry->begin();
-    while (isa<AllocaInst>(I))
-      ++I;
-
-    CastInst *AllocaInsertionPoint = new BitCastInst(
-        Constant::getNullValue(Type::getInt32Ty(F->getContext())),
-        Type::getInt32Ty(F->getContext()), "mergecalls alloca point", &*I);
-
     for (CallInst *C : CallSites) {
       BasicBlock *ParentBlock = C->getParent();
       BasicBlock *ReturnBlock =
