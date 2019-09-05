@@ -1,7 +1,5 @@
 find_package(LLVM REQUIRED)
 
-include_directories(${LLVM_INCLUDE_DIRS})
-add_definitions(${LLVM_DEFINITIONS})
 add_library(shellvm MODULE
   PreparePass.cpp
   PrecheckPass.cpp
@@ -11,5 +9,7 @@ add_library(shellvm MODULE
   InlineCtorsPass.cpp
   PostcheckPass.cpp
 )
+target_include_directories(shellvm PRIVATE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(shellvm PRIVATE ${LLVM_DEFINITIONS})
 
 set_target_properties(shellvm PROPERTIES PREFIX "")
