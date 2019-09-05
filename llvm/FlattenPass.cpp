@@ -1,4 +1,5 @@
 #include "MergeCallsPass.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -33,6 +34,7 @@ struct Flatten : public ModulePass {
 
     // First, run the MergeCalls pass on it:
     CallInst *CallSite = MergeCalls::mergeCallSites(Caller, F);
+    assert(CallSite && "MergeCalls did not return a unified callsite");
 
     // Coerce LLVM to inline the function.
     InlineFunctionInfo IFI;
@@ -93,6 +95,7 @@ struct Flatten : public ModulePass {
   bool runOnModule(Module &M) override {
     bool ModifiedAny = false;
     bool ModifiedOne = false;
+    SmallSetVector<Function *, 4> ModifiedFunctions;
 
     // We keep running, inlining functions into other functions, until there's
     // no work left to do.
@@ -111,6 +114,10 @@ struct Flatten : public ModulePass {
         }
 
         if (inlineFunction(&F, Caller->getFunction())) {
+          // Keep track of functions that need reg2mem
+          ModifiedFunctions.insert(Caller->getFunction());
+          ModifiedFunctions.remove(&F);
+
           // Mark the module as modified and start over
           ModifiedOne = true;
           ModifiedAny = true;
@@ -119,6 +126,13 @@ struct Flatten : public ModulePass {
       }
 
     } while (ModifiedOne);
+
+    if (ModifiedAny) {
+      FunctionPass *reg2mem = llvm::createDemoteRegisterToMemoryPass();
+      for (Function *F : ModifiedFunctions) {
+        reg2mem->runOnFunction(*F);
+      }
+    }
 
     return ModifiedAny;
   }
