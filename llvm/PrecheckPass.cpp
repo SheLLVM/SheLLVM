@@ -11,11 +11,6 @@ struct Precheck : public FunctionPass {
   Precheck() : FunctionPass(ID) {}
 
   bool runOnFunction(Function &F) override {
-    if (!F.hasFnAttribute(Attribute::NoRecurse)) {
-      report_fatal_error("Function " + F.getName() +
-                         " is not marked with norecurse!");
-    }
-
     if (!F.hasFnAttribute("shellvm-main")) {
       if (F.getUnnamedAddr() != GlobalValue::UnnamedAddr::None) {
         report_fatal_error("Function " + F.getName() +
