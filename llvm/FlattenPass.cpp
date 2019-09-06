@@ -17,6 +17,7 @@ using namespace llvm;
 namespace {
 struct Flatten : public ModulePass {
   static char ID;
+  FunctionPass *reg2mem = nullptr;
   std::vector<Function *> functionsFromMain;
   Flatten() : ModulePass(ID) {}
 
@@ -35,6 +36,10 @@ struct Flatten : public ModulePass {
     // First, run the MergeCalls pass on it:
     CallInst *CallSite = MergeCalls::mergeCallSites(Caller, F);
     assert(CallSite && "MergeCalls did not return a unified callsite");
+
+    if (reg2mem == nullptr)
+      reg2mem = llvm::createDemoteRegisterToMemoryPass();
+    reg2mem->runOnFunction(*Caller);
 
     // Coerce LLVM to inline the function.
     InlineFunctionInfo IFI;
@@ -126,13 +131,6 @@ struct Flatten : public ModulePass {
       }
 
     } while (ModifiedOne);
-
-    if (ModifiedAny) {
-      FunctionPass *reg2mem = llvm::createDemoteRegisterToMemoryPass();
-      for (Function *F : ModifiedFunctions) {
-        reg2mem->runOnFunction(*F);
-      }
-    }
 
     return ModifiedAny;
   }
