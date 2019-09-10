@@ -48,20 +48,41 @@ static void makeAllConstantUsesInstructions(Constant *C) {
           "Can't transform non-constantexpr non-instruction to instruction!");
   }
 
-  SmallVector<Value *, 4> UUsers;
+  SmallVector<Instruction *, 4> CEUsers;
   for (auto *U : Users) {
-    UUsers.clear();
-    for (auto *UU : U->users())
-      UUsers.push_back(UU);
-    for (auto *UU : UUsers) {
-      Instruction *UI = cast<Instruction>(UU);
-      Instruction *NewU = U->getAsInstruction();
-      NewU->insertBefore(UI);
-      UI->replaceUsesOfWith(U, NewU);
-    }
-    // We've replaced all the uses, so destroy the constant. (destroyConstant
-    // will update value handles and metadata.)
-    U->destroyConstant();
+    // DFS DAG traversal of U to eliminate ConstantExprs recursively
+    ConstantExpr *CE = nullptr;
+
+    do {
+      CE = U; // Start by trying to destroy the root
+
+      CEUsers.clear();
+      auto it = CE->user_begin();
+      while (it != CE->user_end()) {
+        if (isa<ConstantExpr>(*it)) {
+          // Recursive ConstantExpr found; switch to it
+          CEUsers.clear();
+          CE = cast<ConstantExpr>(*it);
+          it = CE->user_begin();
+        } else {
+          // Function; add to UUsers
+          CEUsers.push_back(cast<Instruction>(*it));
+          it++;
+        }
+      }
+
+      // All users of CE are instructions; replace CE with an instruction for
+      // each
+      for (auto *CEU : CEUsers) {
+        Instruction *NewU = CE->getAsInstruction();
+        NewU->insertBefore(CEU);
+        CEU->replaceUsesOfWith(CE, NewU);
+      }
+
+      // We've replaced all the uses, so destroy the constant. (destroyConstant
+      // will update value handles and metadata.)
+      CE->destroyConstant();
+    } while (CE != U); // Continue until U is destroyed
   }
 }
 
