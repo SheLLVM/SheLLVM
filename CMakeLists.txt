@@ -18,9 +18,6 @@ endif()
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-string(APPEND CMAKE_C_FLAGS " -flto")
-string(APPEND CMAKE_CXX_FLAGS " -flto")
-
 option(ENABLE_TESTS "Build the various test cases" OFF)
 
 add_subdirectory(llvm)
