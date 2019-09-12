@@ -130,8 +130,9 @@ struct GlobalToStack : public ModulePass {
       if (isa<ConstantAggregate>(C2)) {
         disaggregateVars(After, Ptr, Idx, cast<ConstantAggregate>(*C2), Vars);
 
-      } else if (isa<GlobalVariable>(C2) &&
-                 Vars.count(cast<GlobalVariable>(C2))) {
+      } else if (isa<ConstantExpr>(C2) ||
+                 (isa<GlobalVariable>(C2) &&
+                  Vars.count(cast<GlobalVariable>(C2)))) {
         GetElementPtrInst *GEP = GetElementPtrInst::CreateInBounds(Ptr, Idx);
         GEP->insertAfter(After);
 
