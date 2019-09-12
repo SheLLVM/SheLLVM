@@ -1,3 +1,6 @@
+#include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
@@ -12,14 +15,28 @@ using namespace llvm;
 namespace {
 static Function *getUsingFunction(Value &V) {
   Function *F = nullptr;
+
   SmallVector<User *, 4> Worklist;
+  SmallSet<User *, 4> Visited;
+
   for (auto *U : V.users())
     Worklist.push_back(U);
   while (!Worklist.empty()) {
     auto *U = Worklist.pop_back_val();
-    if (isa<ConstantExpr>(U)) {
-      for (auto *UU : U->users())
+
+    if (Visited.count(U))
+      continue;
+    else
+      Visited.insert(U);
+
+    if (isa<ConstantExpr>(U) || isa<ConstantAggregate>(U) ||
+        isa<GlobalVariable>(U)) {
+      if (isa<GlobalVariable>(U) &&
+          !cast<GlobalVariable>(U)->isDiscardableIfUnused())
+        return nullptr;
+      for (auto *UU : U->users()) {
         Worklist.push_back(UU);
+      }
       continue;
     }
 
@@ -31,6 +48,7 @@ static Function *getUsingFunction(Value &V) {
     if (I->getParent()->getParent() != F)
       return nullptr;
   }
+
   return F;
 }
 
@@ -99,39 +117,105 @@ struct GlobalToStack : public ModulePass {
     return true;
   }
 
-  bool inlineGlobal(GlobalVariable &G) {
-    Function *F = getUsingFunction(G);
-    assert(F != nullptr);
+  void disaggregateVars(Instruction *After, Value *Ptr,
+                        SmallVectorImpl<Value *> &Idx, ConstantAggregate &C,
+                        SmallSetVector<GlobalVariable *, 4> &Vars) {
+    SmallSetVector<Value *, 4> ToUndefine;
 
+    Constant *C2;
+    for (unsigned i = 0; (C2 = C.getAggregateElement(i)); i++) {
+      Idx.push_back(ConstantInt::get(
+          Type::getInt32Ty(After->getParent()->getContext()), i));
+
+      if (isa<ConstantAggregate>(C2)) {
+        disaggregateVars(After, Ptr, Idx, cast<ConstantAggregate>(*C2), Vars);
+
+      } else if (isa<GlobalVariable>(C2) &&
+                 Vars.count(cast<GlobalVariable>(C2))) {
+        GetElementPtrInst *GEP = GetElementPtrInst::CreateInBounds(Ptr, Idx);
+        GEP->insertAfter(After);
+
+        ToUndefine.insert(C2);
+
+        (new StoreInst(C2, GEP))->insertAfter(GEP);
+      }
+
+      Idx.pop_back();
+    }
+
+    for (auto *V : ToUndefine)
+      C.handleOperandChange(V, UndefValue::get(V->getType()));
+  }
+
+  void extractValuesFromStore(StoreInst *inst,
+                              SmallSetVector<GlobalVariable *, 4> &Vars) {
+    Value *V = inst->getValueOperand();
+    if (!isa<ConstantAggregate>(V))
+      return;
+
+    SmallVector<Value *, 4> Idx;
+    Idx.push_back(
+        ConstantInt::get(Type::getInt32Ty(inst->getParent()->getContext()), 0));
+
+    disaggregateVars(inst, inst->getPointerOperand(), Idx,
+                     cast<ConstantAggregate>(*V), Vars);
+  }
+
+  void inlineGlobals(Function *F, SmallSetVector<GlobalVariable *, 4> &Vars) {
     BasicBlock &BB = F->getEntryBlock();
     Instruction *insertionPoint = &*BB.getFirstInsertionPt();
-    Instruction *inst =
-        new AllocaInst(G.getValueType(),
+
+    // Step one: Bring all vars into F
+    SmallMapVector<GlobalVariable *, Instruction *, 4> Replacements;
+    StoreInst *firstStore = nullptr;
+    for (auto *G : Vars) {
+      Instruction *inst =
+          new AllocaInst(G->getValueType(),
 #if LLVM_VERSION_MAJOR >= 5
-                       G.getType()->getAddressSpace(),
+                         G->getType()->getAddressSpace(),
 #endif
-                       nullptr, G.getAlignment(), "", insertionPoint);
-    inst->takeName(&G);
+                         nullptr, G->getAlignment(), "",
+                         firstStore ? firstStore : insertionPoint);
 
-    // Some users of G might be ConstantExprs. These can't refer
-    // to Instructions, so we need to turn them into explicit Instructions.
-    makeAllConstantUsesInstructions(&G);
+      inst->takeName(G);
 
-    G.replaceAllUsesWith(inst);
-    if (G.hasInitializer())
-      new StoreInst(G.getInitializer(), inst, insertionPoint);
+      Replacements[G] = inst;
 
-    return true;
+      if (G->hasInitializer()) {
+        Constant *initializer = G->getInitializer();
+        StoreInst *store = new StoreInst(initializer, inst, insertionPoint);
+        G->setInitializer(nullptr);
+
+        extractValuesFromStore(store, Vars);
+
+        if (!firstStore)
+          firstStore = store;
+      }
+    }
+
+    // Step two: Replace all uses
+    for (auto &KV : Replacements) {
+      // Some users of G might be ConstantExprs. These can't refer
+      // to Instructions, so we need to turn them into explicit Instructions.
+      makeAllConstantUsesInstructions(KV.first);
+
+      KV.first->replaceAllUsesWith(KV.second);
+      KV.first->eraseFromParent();
+    }
   }
 
   bool runOnModule(Module &M) override {
     bool inlined = false;
+    SmallMapVector<Function *, SmallSetVector<GlobalVariable *, 4>, 4> Usage;
 
     for (GlobalVariable &G : M.globals())
       if (shouldInline(G))
-        inlined |= inlineGlobal(G);
+        Usage[getUsingFunction(G)].insert(&G);
 
-    return inlined;
+    for (auto &KV : Usage)
+      inlineGlobals(KV.first, KV.second);
+
+    return !Usage.empty();
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
