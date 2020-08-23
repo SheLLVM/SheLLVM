@@ -15,7 +15,7 @@ if(NOT (CMAKE_C_COMPILER_ID MATCHES "Clang" AND
   message(FATAL_ERROR "Can only work with Clang!")
 endif()
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(ENABLE_TESTS "Build the various test cases" OFF)

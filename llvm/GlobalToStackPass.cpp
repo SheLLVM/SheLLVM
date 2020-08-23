@@ -175,7 +175,7 @@ struct GlobalToStack : public ModulePass {
 #if LLVM_VERSION_MAJOR >= 5
                          G->getType()->getAddressSpace(),
 #endif
-                         nullptr, G->getAlignment(), "",
+                         nullptr, MaybeAlign{G->getAlignment()}, "",
                          firstStore ? firstStore : insertionPoint);
 
       inst->takeName(G);
