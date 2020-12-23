@@ -138,8 +138,7 @@ struct GlobalToStack : public ModulePass {
 
         ToUndefine.insert(C2);
 
-        Instruction* insertBefore = nullptr;
-        (new StoreInst(C2, GEP, insertBefore))->insertAfter(GEP);
+        new StoreInst(C2, GEP, GEP->getNextNode());
       }
 
       Idx.pop_back();
