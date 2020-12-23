@@ -4,8 +4,6 @@ os: linux
 dist: focal
 sudo: false
 
-compiler: clang
-
 addons:
     apt:
         sources:
