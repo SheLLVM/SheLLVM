@@ -2,7 +2,7 @@ function(add_test_case name file)
   add_custom_target(${name} ALL
     COMMAND ${CMAKE_C_COMPILER} -O1 -Xclang -disable-llvm-passes
       -c -emit-llvm -o ${name}.bc ${CMAKE_CURRENT_SOURCE_DIR}/${file}
-    COMMAND opt -load=$<TARGET_FILE:shellvm>
+    COMMAND opt-9 -load=$<TARGET_FILE:shellvm>
       -shellvm-prepare -shellvm-flatten -shellvm-global2stack
       -mem2reg -globaldce -lowerswitch
       -shellvm-postcheck
