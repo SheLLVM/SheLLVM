@@ -117,6 +117,9 @@ struct MergeCalls : public FunctionPass {
 
     // This is the actual call to the target
     CallInst *UnifiedCall = CallInst::Create(
+        #if LLVM_VERSION_MAJOR >= 11
+            Target->getFunctionType(),
+        #endif 
         cast<Value>(Target), ArrayRef<Value *>(CallArgs), "", CallBlock);
 
     for (CallInst *C : CallSites) {

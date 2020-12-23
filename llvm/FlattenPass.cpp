@@ -7,6 +7,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/Analysis/InlineCost.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -43,8 +44,13 @@ struct Flatten : public ModulePass {
 
     // Coerce LLVM to inline the function.
     InlineFunctionInfo IFI;
-    if (!InlineFunction(CallSite, IFI))
-      return false;
+    #if LLVM_VERSION_MAJOR >= 11
+        if (!InlineFunction(cast<CallBase>(*CallSite), IFI).isSuccess()) {
+    #else
+        if(!InlineFunction(CallSite, IFI)) {
+    #endif
+            return false;
+    }
 
     // If F is now completely dead, we can erase it from the module.
     if (F->isDefTriviallyDead()) {

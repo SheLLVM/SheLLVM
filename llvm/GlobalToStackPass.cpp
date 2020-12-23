@@ -138,7 +138,8 @@ struct GlobalToStack : public ModulePass {
 
         ToUndefine.insert(C2);
 
-        (new StoreInst(C2, GEP))->insertAfter(GEP);
+        Instruction* insertBefore = nullptr;
+        (new StoreInst(C2, GEP, insertBefore))->insertAfter(GEP);
       }
 
       Idx.pop_back();
@@ -175,7 +176,13 @@ struct GlobalToStack : public ModulePass {
 #if LLVM_VERSION_MAJOR >= 5
                          G->getType()->getAddressSpace(),
 #endif
-                         nullptr, MaybeAlign{G->getAlignment()}, "",
+                         nullptr, 
+#if LLVM_VERSION_MAJOR >= 10
+                         G->getAlign().valueOrOne(),
+#else
+                         G->getAlignment(),
+#endif
+                         "",
                          firstStore ? firstStore : insertionPoint);
 
       inst->takeName(G);
