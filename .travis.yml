@@ -15,8 +15,5 @@ addons:
             - llvm-11
             - llvm-11-dev
 
-env:
-    - CC=clang-11 CXX=clang++-11
-
 script:
-- mkdir -p build && cd build && cmake -DENABLE_TESTS=ON .. && make
+- mkdir -p build && cd build && CC=clang-11 CXX=clang++-11 cmake -DENABLE_TESTS=ON .. && make
