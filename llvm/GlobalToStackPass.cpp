@@ -176,8 +176,10 @@ struct GlobalToStack : public ModulePass {
                          G->getType()->getAddressSpace(),
 #endif
                          nullptr, 
-#if LLVM_VERSION_MAJOR >= 10
+#if LLVM_VERSION_MAJOR >= 11
                          G->getAlign().valueOrOne(),
+#elif LLVM_VERSION_MAJOR == 10
+                         MaybeAlign{G->getAlignment()},
 #else
                          G->getAlignment(),
 #endif
