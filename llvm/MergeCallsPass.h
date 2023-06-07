@@ -25,7 +25,7 @@ struct MergeCalls : public FunctionPass {
   /// Get a/the BasicBlock containing an unreachable instruction.
   static BasicBlock *getUnreachableBlock(Function *F) {
     for (BasicBlock &BB : *F) {
-      if (BB.getInstList().size() == 1) {
+      if (BB.size() == 1) {
         // Single-instruction block, let's see if it only consists of a
         // unreachable instruction.
         const Instruction *instr = BB.getFirstNonPHI();

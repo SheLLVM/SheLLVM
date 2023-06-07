@@ -3,6 +3,7 @@ function(add_test_case name file)
     COMMAND ${CMAKE_C_COMPILER} -O1 -Xclang -disable-llvm-passes
       -c -emit-llvm -o ${name}.bc ${CMAKE_CURRENT_SOURCE_DIR}/${file}
     COMMAND opt -load=$<TARGET_FILE:shellvm>
+      -enable-new-pm=0
       -shellvm-prepare -shellvm-flatten -shellvm-global2stack
       -mem2reg -globaldce -lowerswitch
       -shellvm-postcheck

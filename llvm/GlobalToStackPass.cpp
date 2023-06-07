@@ -133,7 +133,7 @@ struct GlobalToStack : public ModulePass {
       } else if (isa<ConstantExpr>(C2) ||
                  (isa<GlobalVariable>(C2) &&
                   Vars.count(cast<GlobalVariable>(C2)))) {
-        GetElementPtrInst *GEP = GetElementPtrInst::CreateInBounds(Ptr, Idx);
+        GetElementPtrInst *GEP = GetElementPtrInst::CreateInBounds(C.getType(), Ptr, Idx);
         GEP->insertAfter(After);
 
         ToUndefine.insert(C2);

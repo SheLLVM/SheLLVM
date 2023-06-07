@@ -36,10 +36,10 @@ struct PreparePass : public ModulePass {
     for (int I = 0, E = A->getNumOperands(); I < E; ++I) {
       auto D = cast<ConstantStruct>(A->getOperand(I));
 
-      if (auto Fn = dyn_cast<Function>(D->getOperand(0)->getOperand(0))) {
+      if (auto Fn = dyn_cast<Function>(D->getOperand(0))) {
         auto Annotation =
             cast<ConstantDataArray>(
-                cast<GlobalVariable>(D->getOperand(1)->getOperand(0))
+                cast<GlobalVariable>(D->getOperand(1))
                     ->getOperand(0))
                 ->getAsCString();
 
