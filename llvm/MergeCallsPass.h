@@ -8,6 +8,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
@@ -18,10 +19,7 @@
 using namespace llvm;
 
 namespace {
-struct MergeCalls : public FunctionPass {
-  static char ID;
-  MergeCalls() : FunctionPass(ID) {}
-
+struct MergeCalls : PassInfoMixin<MergeCalls> {
   /// Get a/the BasicBlock containing an unreachable instruction.
   static BasicBlock *getUnreachableBlock(Function *F) {
     for (BasicBlock &BB : *F) {
@@ -117,9 +115,9 @@ struct MergeCalls : public FunctionPass {
 
     // This is the actual call to the target
     CallInst *UnifiedCall = CallInst::Create(
-        #if LLVM_VERSION_MAJOR >= 11
-            Target->getFunctionType(),
-        #endif 
+#if LLVM_VERSION_MAJOR >= 11
+        Target->getFunctionType(),
+#endif
         cast<Value>(Target), ArrayRef<Value *>(CallArgs), "", CallBlock);
 
     for (CallInst *C : CallSites) {
@@ -148,7 +146,7 @@ struct MergeCalls : public FunctionPass {
     return UnifiedCall;
   }
 
-  bool runOnFunction(Function &F) override {
+  llvm::PreservedAnalyses run(Function &F, FunctionAnalysisManager &FM) {
     std::map<Function *, std::vector<CallInst *>> FuncToInvokers;
     bool Modified = false;
 
@@ -188,12 +186,12 @@ struct MergeCalls : public FunctionPass {
     if (Modified) {
       FunctionPass *reg2mem = llvm::createDemoteRegisterToMemoryPass();
       reg2mem->runOnFunction(F);
+      return llvm::PreservedAnalyses::none();
     }
 
-    return Modified;
+    return llvm::PreservedAnalyses::all();
   }
 }; // end of struct MergeCalls
 } // end of anonymous namespace
 
-char MergeCalls::ID = 0;
 #endif

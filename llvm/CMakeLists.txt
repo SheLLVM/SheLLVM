@@ -1,9 +1,9 @@
 find_package(LLVM REQUIRED)
 
 add_library(shellvm MODULE
+  SheLLVMPlugin.cpp
   PreparePass.cpp
   PrecheckPass.cpp
-  MergeCallsPass.cpp
   FlattenPass.cpp
   GlobalToStackPass.cpp
   InlineCtorsPass.cpp

@@ -9,10 +9,11 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO/GlobalOpt.h"
 
+#include "GlobalToStackPass.h"
+
 using namespace std;
 using namespace llvm;
 
-namespace {
 static Function *getUsingFunction(Value &V) {
   Function *F = nullptr;
 
@@ -104,137 +105,119 @@ static void makeAllConstantUsesInstructions(Constant *C) {
   }
 }
 
-struct GlobalToStack : public ModulePass {
-  static char ID;
-  GlobalToStack() : ModulePass(ID) {}
+bool GlobalToStack::shouldInline(GlobalVariable &G) {
+  if (!G.isDiscardableIfUnused())
+    return false; // Goal is to discard these; ignore if that's not possible
+  if (!getUsingFunction(G))
+    return false; // This isn't safe. We can only be on one function's stack.
 
-  bool shouldInline(GlobalVariable &G) {
-    if (!G.isDiscardableIfUnused())
-      return false; // Goal is to discard these; ignore if that's not possible
-    if (!getUsingFunction(G))
-      return false; // This isn't safe. We can only be on one function's stack.
+  return true;
+}
 
-    return true;
-  }
+void GlobalToStack::disaggregateVars(
+    Instruction *After, Value *Ptr, SmallVectorImpl<Value *> &Idx,
+    ConstantAggregate &C, SmallSetVector<GlobalVariable *, 4> &Vars) {
+  SmallSetVector<Value *, 4> ToUndefine;
 
-  void disaggregateVars(Instruction *After, Value *Ptr,
-                        SmallVectorImpl<Value *> &Idx, ConstantAggregate &C,
-                        SmallSetVector<GlobalVariable *, 4> &Vars) {
-    SmallSetVector<Value *, 4> ToUndefine;
+  Constant *C2;
+  for (unsigned i = 0; (C2 = C.getAggregateElement(i)); i++) {
+    Idx.push_back(ConstantInt::get(
+        Type::getInt32Ty(After->getParent()->getContext()), i));
 
-    Constant *C2;
-    for (unsigned i = 0; (C2 = C.getAggregateElement(i)); i++) {
-      Idx.push_back(ConstantInt::get(
-          Type::getInt32Ty(After->getParent()->getContext()), i));
+    if (isa<ConstantAggregate>(C2)) {
+      disaggregateVars(After, Ptr, Idx, cast<ConstantAggregate>(*C2), Vars);
 
-      if (isa<ConstantAggregate>(C2)) {
-        disaggregateVars(After, Ptr, Idx, cast<ConstantAggregate>(*C2), Vars);
+    } else if (isa<ConstantExpr>(C2) ||
+               (isa<GlobalVariable>(C2) &&
+                Vars.count(cast<GlobalVariable>(C2)))) {
+      GetElementPtrInst *GEP =
+          GetElementPtrInst::CreateInBounds(C.getType(), Ptr, Idx);
+      GEP->insertAfter(After);
 
-      } else if (isa<ConstantExpr>(C2) ||
-                 (isa<GlobalVariable>(C2) &&
-                  Vars.count(cast<GlobalVariable>(C2)))) {
-        GetElementPtrInst *GEP = GetElementPtrInst::CreateInBounds(C.getType(), Ptr, Idx);
-        GEP->insertAfter(After);
+      ToUndefine.insert(C2);
 
-        ToUndefine.insert(C2);
-
-        new StoreInst(C2, GEP, GEP->getNextNode());
-      }
-
-      Idx.pop_back();
+      new StoreInst(C2, GEP, GEP->getNextNode());
     }
 
-    for (auto *V : ToUndefine)
-      C.handleOperandChange(V, UndefValue::get(V->getType()));
+    Idx.pop_back();
   }
 
-  void extractValuesFromStore(StoreInst *inst,
-                              SmallSetVector<GlobalVariable *, 4> &Vars) {
-    Value *V = inst->getValueOperand();
-    if (!isa<ConstantAggregate>(V))
-      return;
+  for (auto *V : ToUndefine)
+    C.handleOperandChange(V, UndefValue::get(V->getType()));
+}
 
-    SmallVector<Value *, 4> Idx;
-    Idx.push_back(
-        ConstantInt::get(Type::getInt32Ty(inst->getParent()->getContext()), 0));
+void GlobalToStack::extractValuesFromStore(
+    StoreInst *inst, SmallSetVector<GlobalVariable *, 4> &Vars) {
+  Value *V = inst->getValueOperand();
+  if (!isa<ConstantAggregate>(V))
+    return;
 
-    disaggregateVars(inst, inst->getPointerOperand(), Idx,
-                     cast<ConstantAggregate>(*V), Vars);
-  }
+  SmallVector<Value *, 4> Idx;
+  Idx.push_back(
+      ConstantInt::get(Type::getInt32Ty(inst->getParent()->getContext()), 0));
 
-  void inlineGlobals(Function *F, SmallSetVector<GlobalVariable *, 4> &Vars) {
-    BasicBlock &BB = F->getEntryBlock();
-    Instruction *insertionPoint = &*BB.getFirstInsertionPt();
+  disaggregateVars(inst, inst->getPointerOperand(), Idx,
+                   cast<ConstantAggregate>(*V), Vars);
+}
 
-    // Step one: Bring all vars into F
-    SmallMapVector<GlobalVariable *, Instruction *, 4> Replacements;
-    StoreInst *firstStore = nullptr;
-    for (auto *G : Vars) {
-      Instruction *inst =
-          new AllocaInst(G->getValueType(),
-#if LLVM_VERSION_MAJOR >= 5
-                         G->getType()->getAddressSpace(),
-#endif
-                         nullptr, 
-#if LLVM_VERSION_MAJOR >= 11
-                         G->getAlign().valueOrOne(),
-#elif LLVM_VERSION_MAJOR == 10
-                         MaybeAlign{G->getAlignment()},
-#else
-                         G->getAlignment(),
-#endif
-                         "",
-                         firstStore ? firstStore : insertionPoint);
+void GlobalToStack::inlineGlobals(Function *F,
+                                  SmallSetVector<GlobalVariable *, 4> &Vars) {
+  BasicBlock &BB = F->getEntryBlock();
+  Instruction *insertionPoint = &*BB.getFirstInsertionPt();
 
-      inst->takeName(G);
+  // Step one: Bring all vars into F
+  SmallMapVector<GlobalVariable *, Instruction *, 4> Replacements;
+  StoreInst *firstStore = nullptr;
+  for (auto *G : Vars) {
+    Instruction *inst =
+        new AllocaInst(G->getValueType(), G->getType()->getAddressSpace(),
+                       nullptr, G->getAlign().valueOrOne(), "",
+                       firstStore ? firstStore : insertionPoint);
 
-      Replacements[G] = inst;
+    inst->takeName(G);
 
-      if (G->hasInitializer()) {
-        Constant *initializer = G->getInitializer();
-        StoreInst *store = new StoreInst(initializer, inst, insertionPoint);
-        G->setInitializer(nullptr);
+    Replacements[G] = inst;
 
-        extractValuesFromStore(store, Vars);
+    if (G->hasInitializer()) {
+      Constant *initializer = G->getInitializer();
+      StoreInst *store = new StoreInst(initializer, inst, insertionPoint);
+      G->setInitializer(nullptr);
 
-        if (!firstStore)
-          firstStore = store;
-      }
-    }
+      extractValuesFromStore(store, Vars);
 
-    // Step two: Replace all uses
-    for (auto &KV : Replacements) {
-      // Some users of G might be ConstantExprs. These can't refer
-      // to Instructions, so we need to turn them into explicit Instructions.
-      makeAllConstantUsesInstructions(KV.first);
-
-      KV.first->replaceAllUsesWith(KV.second);
-      KV.first->eraseFromParent();
+      if (!firstStore)
+        firstStore = store;
     }
   }
 
-  bool runOnModule(Module &M) override {
-    bool inlined = false;
-    SmallMapVector<Function *, SmallSetVector<GlobalVariable *, 4>, 4> Usage;
+  // Step two: Replace all uses
+  for (auto &KV : Replacements) {
+    // Some users of G might be ConstantExprs. These can't refer
+    // to Instructions, so we need to turn them into explicit Instructions.
+    makeAllConstantUsesInstructions(KV.first);
 
-    for (GlobalVariable &G : M.globals())
-      if (shouldInline(G))
-        Usage[getUsingFunction(G)].insert(&G);
+    KV.first->replaceAllUsesWith(KV.second);
+    KV.first->eraseFromParent();
+  }
+}
 
-    for (auto &KV : Usage)
-      inlineGlobals(KV.first, KV.second);
+llvm::PreservedAnalyses GlobalToStack::run(Module &M,
+                                           ModuleAnalysisManager &AM) {
 
-    return !Usage.empty();
+  SmallMapVector<Function *, SmallSetVector<GlobalVariable *, 4>, 4> Usage;
+
+  for (GlobalVariable &G : M.globals())
+    if (shouldInline(G))
+      Usage[getUsingFunction(G)].insert(&G);
+
+  for (auto &KV : Usage)
+    inlineGlobals(KV.first, KV.second);
+
+  if (Usage.empty()) {
+    return llvm::PreservedAnalyses::all();
   }
 
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.setPreservesCFG();
-  }
-}; // end of struct GlobalToStack
-} // end of anonymous namespace
-
-char GlobalToStack::ID = 0;
-static RegisterPass<GlobalToStack> X("shellvm-global2stack",
-                                     "Global-to-Stack Pass",
-                                     false /* Only looks at CFG */,
-                                     false /* Analysis Pass */);
+  llvm::PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
+  return PA;
+}
