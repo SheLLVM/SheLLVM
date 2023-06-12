@@ -40,11 +40,7 @@ bool Flatten::inlineFunction(Function *F, Function *Caller) {
 
   // Coerce LLVM to inline the function.
   InlineFunctionInfo IFI;
-#if LLVM_VERSION_MAJOR >= 11
   if (!InlineFunction(cast<CallBase>(*CallSite), IFI).isSuccess()) {
-#else
-  if (!InlineFunction(CallSite, IFI)) {
-#endif
     return false;
   }
 
