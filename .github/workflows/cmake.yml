@@ -20,7 +20,7 @@ jobs:
       run: (wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -) && (echo -e 'deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main\ndeb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main' | sudo tee /etc/apt/sources.list.d/llvm.list) && sudo apt-get update && sudo apt-get -y install libllvm16 llvm-16 llvm-16-dev llvm-16-runtime clang-16 clang-tools-16 libclang-common-16-dev libclang-16-dev libclang1-16
 
     - name: Create Symlinks
-      run: sudo ln -sf /usr/bin/opt-16 /usr/bin/opt && sudo ln -sf /usr/bin/clang-16 /usr/bin/clang && sudo ln -s /usr/bin/clang++-16 /usr/bin/clang++
+      run: sudo ln -sf /usr/bin/opt-16 /usr/bin/opt && sudo ln -sf /usr/bin/clang-16 /usr/bin/clang && sudo ln -sf /usr/bin/clang++-16 /usr/bin/clang++
 
     - name: Create Build Environment
       # Some projects don't allow in-source building, so create a separate build directory
